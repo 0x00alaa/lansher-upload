@@ -1,0 +1,25 @@
+[package]
+name = "lansher-desktop"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+description = "Lansher — مساعد البث لـ Windows"
+license = "UNLICENSED"
+default-run = "lansher-desktop"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+lansher-core = { path = "../../../crates/lansher-core" }
+lansher-server = { path = "../../../crates/lansher-server" }
+lansher-store = { path = "../../../crates/lansher-store" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# `protocol-asset` مطلوبة لأن `tauri.conf.json` يفعّل `assetProtocol`
+# لتشغيل ملفات الصوت المحلية. المجال محصور بـ`$AUDIO/**` و`$MEDIA/**`.
+tauri = { version = "2", features = ["protocol-asset"] }
+
+[features]
+# يُستخدم في `tauri build` فقط، ويُلغى في التطوير السريع.
+custom-protocol = ["tauri/custom-protocol"]

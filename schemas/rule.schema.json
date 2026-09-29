@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lansher.dev/schemas/rule.schema.json",
+  "title": "Action/Event Rule",
+  "type": "object",
+  "required": ["id", "name", "enabled", "conditions", "actions"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "enabled": { "type": "boolean" },
+    "priority": { "type": "integer", "default": 0 },
+    "trigger": {
+      "oneOf": [
+        { "$ref": "#/$defs/eventType" },
+        { "type": "null" }
+      ]
+    },
+    "group_op": {
+      "type": ["string", "null"],
+      "enum": ["all", "any", null]
+    },
+    "start_delay_ms": { "type": "integer", "minimum": 0, "default": 0 },
+    "max_concurrent": { "type": "integer", "minimum": 0, "default": 1 },
+    "queue": {
+      "type": "string",
+      "enum": ["immediate", "serial", "bounded"],
+      "default": "serial"
+    },
+    "rate": { "$ref": "#/$defs/rateGate" },
+    "conditions": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/condition" }
+    },
+    "actions": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/actionSpec" }
+    }
+  },
+  "$defs": {
+    "eventType": {
+      "description": "يطابق serde في Rust: الوحدة كائن لا نص.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "StreamStart",
+                "StreamEnd",
+                "Chat",
+                "Like",
+                "Gift",
+                "Follow",
+                "Share",
+                "Join",
+                "Subscribe"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "name"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "Custom" },
+            "name": { "type": "string", "minLength": 1, "maxLength": 64 }
+          }
+        }
+      ]
+    },
+    "compareOp": {
+      "type": "string",
+      "enum": [
+        "eq",
+        "ne",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between",
+        "contains",
+        "starts_with",
+        "ends_with",
+        "matches",
+        "in"
+      ]
+    },
+    "boolExpectation": {
+      "type": "string",
+      "enum": ["true", "false", "any"]
+    },
+    "rateGate": {
+      "type": "object",
+      "required": ["max_hits", "window_ms"],
+      "additionalProperties": false,
+      "properties": {
+        "max_hits": { "type": "integer", "minimum": 0, "default": 0 },
+        "window_ms": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "event_type_is",
+            "event_type_not",
+            "value",
+            "repeat_count",
+            "subject",
+            "text",
+            "nickname",
+            "unique_id",
+            "is_follower",
+            "is_subscriber",
+            "chance",
+            "and",
+            "or",
+            "not"
+          ]
+        },
+        "any_of": { "type": "array", "items": { "$ref": "#/$defs/eventType" } },
+        "op": { "$ref": "#/$defs/compareOp" },
+        "value": { "type": ["string", "number"] },
+        "value2": { "type": ["number", "null"] },
+        "values": { "type": "array", "items": { "type": "string" } },
+        "percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "seed": { "type": ["integer", "null"] },
+        "expect": { "$ref": "#/$defs/boolExpectation" },
+        "conditions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        },
+        "condition": { "$ref": "#/$defs/condition" }
+      }
+    },
+    "actionSpec": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": { "$ref": "#/$defs/action" },
+        "timeout_ms": { "type": "integer", "minimum": 0, "default": 5000 },
+        "delay_after_ms": { "type": "integer", "minimum": 0, "default": 0 },
+        "on_error": {
+          "type": "string",
+          "enum": ["continue", "abort", "retry"],
+          "default": "continue"
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "play_sound",
+            "speak",
+            "alert",
+            "add_to_goal",
+            "send_chat",
+            "webhook",
+            "integration",
+            "log",
+            "none"
+          ]
+        },
+        "file_id": { "type": "string" },
+        "volume": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+        "text": { "type": "string", "maxLength": 2000 },
+        "title": { "type": "string", "maxLength": 200 },
+        "voice": { "type": ["string", "null"] },
+        "rate": { "type": ["integer", "null"] },
+        "image": { "type": ["string", "null"] },
+        "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "goal_id": { "type": "string" },
+        "amount": { "type": ["integer", "null"] },
+        "mode": { "type": ["string", "null"], "enum": ["event", "fixed", null] },
+        "url": { "type": "string", "maxLength": 500 },
+        "method": { "type": ["string", "null"] },
+        "include_event": { "type": ["boolean", "null"] },
+        "target": { "type": "string" },
+        "command": { "type": "string" },
+        "args": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lansher.dev/schemas/response.schema.json",
+  "title": "Bridge Response",
+  "description": "ردّ الجسر على كل طلب. البنية واحدة دائماً حتى يقرأ الكود البسيط في الواجهة.",
+  "type": "object",
+  "required": ["ok", "request_id"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "data": { "description": "حمولة الطلب الناجح. الشكل يتبع cmd." },
+    "error": { "$ref": "#/$defs/bridgeError" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "ok": { "const": true } }, "required": ["ok"] },
+      "then": { "not": { "required": ["error"] } }
+    },
+    {
+      "if": { "properties": { "ok": { "const": false } }, "required": ["ok"] },
+      "then": { "required": ["error"] }
+    }
+  ],
+  "$defs": {
+    "bridgeError": {
+      "description": "code للاستهلاك الآلي لا يُترجم، وmessage عربية للعرض.",
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "unauthorized",
+            "unsupported_protocol",
+            "unknown_request",
+            "source_offline",
+            "forbidden",
+            "internal"
+          ]
+        },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

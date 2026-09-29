@@ -1,0 +1,193 @@
+/* الأساس: تصفير، طباعة، وحالات التركيز. لا ألوان هنا إلا ما ورد في
+ * `tokens.css`، وكل ما يليه من ملفات يبني على هذه القواعد. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* المقياس يغيّر جذر الخط فقط، فكل `rem` في التطبيق يتبعه حتمياً. */
+  font-size: calc(100% * var(--ui-scale));
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+}
+
+/* اتجاه الترجمة للعناصر التي لا تحلّها الخصائص المنطقية وحدها،
+ * كإزاحة مقبض المفتاح. 1 في اللاتيني و-1 في العربي. */
+:root {
+  --dir: 1;
+}
+
+[dir="rtl"] {
+  --dir: -1;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+  line-height: 1.3;
+}
+
+h1 {
+  font-size: 1.5rem;
+}
+h2 {
+  font-size: 1rem;
+}
+h3 {
+  font-size: 0.875rem;
+}
+
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* حلقة تركيز واحدة لكل التطبيق. العنصر الذي gained يُحدَّد بإطار
+ * واضح في الوضعين، لا بلون يتلاشى على السطح نفسه. */
+:focus-visible {
+  outline: var(--ring-width) solid var(--brand-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+::selection {
+  background: var(--brand-soft);
+}
+
+/* أشرطة تمرير رفيعة تختفي حتى يُمرَّر فوقها، فلا تأخذ مساحة من
+ * لوحة الإحصاءات التي تُقرأ بنظرة واحدة. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-subtle);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  text-align: start;
+  vertical-align: middle;
+}
+
+pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  direction: ltr;
+  unicode-bidi: embed;
+  text-align: start;
+}
+
+.muted {
+  color: var(--fg-muted);
+}
+
+.subtle {
+  color: var(--fg-subtle);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* الحركة اختيارية لا زينة: من يطلبه في نظامه لا يدفع ثمن حركاتنا. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

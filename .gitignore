@@ -1,0 +1,27 @@
+# Rust
+/target
+**/target
+**/*.rs.bk
+
+# Node
+node_modules/
+npm-debug.log*
+.npm/
+
+# Build output
+apps/desktop/dist/
+apps/desktop/.vite/
+
+# Secrets — لا تُرفع أبداً
+*.env
+*.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.tfc
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

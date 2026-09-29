@@ -1,0 +1,811 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lansher.dev/schemas/cloud.schema.json",
+  "title": "Cloud API",
+  "description": "سطح HTTP السحابي كما ينفّذه server/src/index.ts: كل مسار وطريقة وحقول الطلب والرد. كل أسماء حقول JSON هنا snake_case بلا استثناء، طلباً كان أم رداً: أسماء حقول JSON لا تُترجم ولا تُختصر. وحدات المجال في auth.ts وsync.ts تكتب camelCase لأنه عُرف TypeScript، لكن التحويل يتم في index.ts عند نقطة التسلسل الوحيدة، فلا تعرف وحدة المجال شيئاً عن HTTP. نسخة مطابقة لـserver/src/api.ts ولـdocs/cloud-api.md. التبعية في الاتجاهين: كل property في تعريف يحمل x-contract اسم حقل HTTP يجب أن يظهر في api.ts، وكل code هنا موجود هناك.",
+  "type": "object",
+  "required": [
+    "base_path",
+    "auth_header",
+    "content_type",
+    "body_limit",
+    "routes",
+    "fallbacks"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "base_path": { "const": "/v1" },
+    "auth_header": {
+      "description": "ترويسة المصادقة الوحيدة. توكن الوصول موقّع ولا يُرسل في جسم أي طلب.",
+      "const": "Authorization: Bearer <access_token>"
+    },
+    "content_type": { "const": "application/json" },
+    "body_limit": {
+      "description": "أقصى حجم لطلب. محتوى الملف وحده سقفه 2MiB.",
+      "const": "3mb"
+    },
+    "routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/route" }
+    },
+    "fallbacks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/fallback" }
+    }
+  },
+  "x-routes": [
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "auth": "none",
+      "summary": "فحص صحة العملية واتصال قاعدة البيانات. بلا توكن، وكُتب لعميل الفحص لا للواجهة.",
+      "request": { "type": "object" },
+      "responses": [
+        {
+          "status": 200,
+          "description": "قاعدة البيانات تردّ.",
+          "schema": { "$ref": "#/$defs/health_status" }
+        },
+        {
+          "status": 503,
+          "description": "قاعدة البيانات لا تردّ. الجسم نفسه بـok=false، لا برمز خطأ.",
+          "schema": { "$ref": "#/$defs/health_status" }
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/signup/start",
+      "auth": "none",
+      "summary": "طلب تسجيل: يتحقق أن البريد غير مستخدم ثم يرسل رمزاً من 8 أرقام. الحساب لا يُنشأ قبل تأكيد الرمز.",
+      "request": { "$ref": "#/$defs/signup_start_request" },
+      "responses": [
+        {
+          "status": 202,
+          "description": "الرمز أُرسل. الرد لا يفرق بين بريد مستخدم وآخر، حتى لا يُجمع بريد ضحايا من توقيت الرد.",
+          "schema": { "$ref": "#/$defs/signup_start_accepted" }
+        },
+        {
+          "status": 429,
+          "codes": ["rate_limited"],
+          "description": "تجاوز حدّ المسارات: 20 طلباً لكل 5 دقائق لكل عنوان IP.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/signup/confirm",
+      "auth": "none",
+      "summary": "تأكيد الرمز: يولّد PIN من 6 أرقام ويعيده مرة واحدة عند الإنشاء، ثم لا يُستعاد أبداً.",
+      "request": { "$ref": "#/$defs/signup_confirm_request" },
+      "responses": [
+        {
+          "status": 201,
+          "description": "الحساب نشط والـPIN في الرد.",
+          "schema": { "$ref": "#/$defs/signup_confirm_created" }
+        },
+        {
+          "status": 400,
+          "codes": ["invalid_code"],
+          "description": "رمز غير موجود أو منتهي أو استُهلك. الحالات الثلاث رد واحد.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 429,
+          "codes": ["too_many_attempts", "rate_limited"],
+          "description": "خمس محاولات فاشلة على الرمز نفسه، أو تجاوز حدّ المسارات بالـIP.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/login",
+      "auth": "none",
+      "summary": "دخول بالـPIN. يولّد زوج توكنات ويسجّل الجهاز، ويزيد عدّاد الفشل على الحساب لا على الـIP.",
+      "request": { "$ref": "#/$defs/login_request" },
+      "responses": [
+        {
+          "status": 200,
+          "description": "دخول ناجح. الرد يحوي توكن الوصول وتوكن التجديد معاً.",
+          "schema": { "$ref": "#/$defs/login_ok" }
+        },
+        {
+          "status": 401,
+          "codes": ["invalid_credentials"],
+          "description": "بريد غير مسجّل أو PIN خاطئ أو صيغة PIN غير مقبولة. الرد واحد وزمنه واحد تقريباً.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 409,
+          "codes": ["session_limit"],
+          "description": "بلغت حدّ الجلسات في الخطة. الرمز session_limit مقصود: عدد الجلسات هو المتغير هنا، لا عدد الأجهزة.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 423,
+          "codes": ["account_locked"],
+          "description": "خمس محاولات فاشلة متتالية قفلت الحساب.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 429,
+          "codes": ["rate_limited"],
+          "description": "الحساب مقفل لكنه ما زال في نافذة القفل، أو تجاوز حدّ المسارات بالـIP.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/refresh",
+      "auth": "none",
+      "summary": "تجديد التوكن. يُبطل القديم ويُصدر جديداً، فإن أُعيد استخدام توكن مُبطل كشف previous_hash ذلك، فيُبطل كل جلسات المستخدم.",
+      "request": { "$ref": "#/$defs/refresh_request" },
+      "responses": [
+        {
+          "status": 200,
+          "description": "تجديد ناجح. التوكن القديم مُبطل فوراً ولا يصح استخدامه ثانية.",
+          "schema": { "$ref": "#/$defs/refresh_ok" }
+        },
+        {
+          "status": 401,
+          "codes": ["session_invalid", "session_expired"],
+          "description": "توكن مجهول أو مُبطل أو منتهي. إعادة الاستخدام تستحق session_invalid لا session_expired.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 429,
+          "codes": ["rate_limited"],
+          "description": "تجاوز حدّ المسارات بالـIP.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/logout",
+      "auth": "none",
+      "summary": "إبطال جلسة واحدة. يردّ 204 دائماً، فوجود التوكن معلومة لا نضيف عليها تأكيداً.",
+      "request": { "$ref": "#/$defs/logout_request" },
+      "responses": [
+        {
+          "status": 204,
+          "description": "أُبطل التوكن أو لم يُعرف، والرد واحد في الحالتين."
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/v1/auth/sessions",
+      "auth": "bearer",
+      "summary": "جلسات المستخدم لعرض شاشة الأجهزة. بلا محتوى، وخمسون جلسة كحد أعلى.",
+      "request": { "type": "object" },
+      "responses": [
+        {
+          "status": 200,
+          "description": "الجلسات من الأحدث استخداماً.",
+          "schema": { "$ref": "#/$defs/session_list" }
+        },
+        {
+          "status": 401,
+          "codes": ["session_invalid"],
+          "description": "توكن غائب أو مزيّف أو منتهٍ أو جلسة ملغاة: الرد نفسه في الحالات كلها.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sync/profiles",
+      "auth": "bearer",
+      "summary": "كل الملفات بعناوينها ومراجعاتها بلا محتوى: العميل يحتاج العناوين للعرض، والمحتوى يُسحب عند الحاجة.",
+      "request": { "type": "object" },
+      "responses": [
+        {
+          "status": 200,
+          "description": "قائمة الملفات من الأحدث تعديلاً.",
+          "schema": { "$ref": "#/$defs/profile_list" }
+        },
+        {
+          "status": 401,
+          "codes": ["session_invalid"],
+          "description": "توكن غائب أو مزيّف أو منتهٍ أو جلسة ملغاة: الرد نفسه في الحالات كلها.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sync/profiles/changed",
+      "auth": "bearer",
+      "summary": "الملفات التي تغيّرت بعد since. غيابه يعني كل الملفات، فيحذف العميل الاستعلام عند المزامنة الأولى.",
+      "query": { "$ref": "#/$defs/profile_changed_query" },
+      "request": { "type": "object" },
+      "responses": [
+        {
+          "status": 200,
+          "description": "ملفات متغيرة بترتيب تصاعدي على updated_at، فالعميل يطبّقها بالترتيب.",
+          "schema": { "$ref": "#/$defs/profile_list" }
+        },
+        {
+          "status": 401,
+          "codes": ["session_invalid"],
+          "description": "توكن غائب أو مزيّف أو منتهٍ أو جلسة ملغاة: الرد نفسه في الحالات كلها.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sync/profiles/:id",
+      "auth": "bearer",
+      "summary": "ملف واحد بمحتواه. الملف المحذوف لا وجود له، فالحذف لا يمرّ هنا بل يردّ not_found.",
+      "path_params": ["id"],
+      "request": { "type": "object" },
+      "responses": [
+        {
+          "status": 200,
+          "description": "الملف بمراجعته الحالية.",
+          "schema": { "$ref": "#/$defs/profile_view" }
+        },
+        {
+          "status": 400,
+          "codes": ["invalid_content"],
+          "description": "المخزّن لا يمرّ بفحص البنية. حالة إصلاح لا حالة عميل.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 401,
+          "codes": ["session_invalid"],
+          "description": "توكن غائب أو مزيّف أو منتهٍ أو جلسة ملغاة: الرد نفسه في الحالات كلها.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 404,
+          "codes": ["not_found"],
+          "description": "لا ملف بهذا المعرّف لهذا المستخدم. لا نفرّق بين الاثنين.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sync/profiles",
+      "auth": "bearer",
+      "summary": "ملف جديد. المراجعة تبدأ من 1، وتُسجّل النسخة الأولى في profile_revisions ضمن المعاملة نفسها.",
+      "request": { "$ref": "#/$defs/create_profile_request" },
+      "responses": [
+        {
+          "status": 201,
+          "description": "أُنشئ الملف. الرد بلا محتوى: العميل يسحب المحتوى بالمعرّف الجديد.",
+          "schema": { "$ref": "#/$defs/profile_summary" }
+        },
+        {
+          "status": 400,
+          "codes": ["invalid_slug", "invalid_name", "invalid_content"],
+          "description": "slug أو اسم أو محتوى لا يمرّ بالفحص البنيوي. الفحص قبل أي كتابة، فالرفض لا يترك أثراً.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 401,
+          "codes": ["session_invalid"],
+          "description": "توكن غائب أو مزيّف أو منتهٍ أو جلسة ملغاة: الرد نفسه في الحالات كلها.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 409,
+          "codes": ["slug_taken", "profile_limit", "rule_limit", "storage_limit"],
+          "description": "المعرّف محجوز، أو بلوغ حدّ الخطة. الحدود في الخادم ولا يقرّرها العميل.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/sync/profiles/:id",
+      "auth": "bearer",
+      "summary": "كتابة على ملف قائم. تقارن expected_revision داخل المعاملة نفسها، فلا تكتب فوق تعديل جهاز آخر.",
+      "path_params": ["id"],
+      "request": { "$ref": "#/$defs/write_profile_request" },
+      "responses": [
+        {
+          "status": 200,
+          "description": "كُتب الملف ومراجعته زادت واحداً.",
+          "schema": { "$ref": "#/$defs/profile_summary" }
+        },
+        {
+          "status": 400,
+          "codes": ["invalid_name", "invalid_content"],
+          "description": "اسم أو محتوى لا يمرّ بالفحص البنيوي.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 401,
+          "codes": ["session_invalid"],
+          "description": "توكن غائب أو مزيّف أو منتهٍ أو جلسة ملغاة: الرد نفسه في الحالات كلها.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 404,
+          "codes": ["not_found"],
+          "description": "لا ملف بهذا المعرّف لهذا المستخدم.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 409,
+          "codes": ["revision_conflict", "rule_limit", "storage_limit"],
+          "description": "تعارض مراجعة: غيّره جهاز آخر فاحذف آخر كتابة، والحلّ عند المستخدم بسحب ثم إعادة. لا حلّ تلقائي.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/sync/profiles/:id",
+      "auth": "bearer",
+      "summary": "حذف ملف. يطلب expected_revision نفسها، فحذف جهاز لنسخة عدّلها جهاز آخر يفشل ولا يمحو التعديل.",
+      "path_params": ["id"],
+      "request": { "$ref": "#/$defs/delete_profile_request" },
+      "responses": [
+        {
+          "status": 204,
+          "description": "حُذف الملف."
+        },
+        {
+          "status": 401,
+          "codes": ["session_invalid"],
+          "description": "توكن غائب أو مزيّف أو منتهٍ أو جلسة ملغاة: الرد نفسه في الحالات كلها.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 404,
+          "codes": ["not_found"],
+          "description": "لا ملف بهذا المعرّف لهذا المستخدم.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        },
+        {
+          "status": 409,
+          "codes": ["revision_conflict"],
+          "description": "المراجعة المُرسلة لا تطابق المخزّنة، فالنسخة عُدّلت بعد آخر سحب.",
+          "schema": { "$ref": "#/$defs/cloud_error" }
+        }
+      ]
+    }
+  ],
+  "x-fallbacks": [
+    {
+      "status": 404,
+      "code": "not_found",
+      "summary": "أي مسار أو طريقة غير معروفة. الرد واحد لكل ما لا وجود له، فلا يُكشف أي المسارات موجودة."
+    },
+    {
+      "status": 400,
+      "code": "invalid_body",
+      "summary": "جسم ليس JSON صالحاً أو أكبر من حد المحتوى. يرميه express.json قبل المسارات، فلا نصل إلى منطق."
+    },
+    {
+      "status": 500,
+      "code": "internal",
+      "summary": "خطأ غير متوقع. نردّ رمزاً ثابتاً، والسبب يُطبع في سجل الخادم لا في الرد."
+    }
+  ],
+  "x-reserved": [
+    {
+      "code": "email_taken",
+      "reason": "محجوز بلا استعمال: طلب التسجيل يردّ 202 سواء كان البريد مستخدماً أو جديداً، والرد لا يفرق."
+    },
+    {
+      "code": "device_limit",
+      "reason": "محجوز بلا استعمال: تجاوز عدد الجلسات يردّ session_limit، فلا يبقى في الرد رقمان لقيد واحد."
+    },
+    {
+      "code": "code_expired",
+      "reason": "محجوز بلا استعمال: الرمز المنتهي يردّ invalid_code، فليس في كل تمييز فائدة للعميل."
+    }
+  ],
+  "$defs": {
+    "route": {
+      "title": "Cloud Route",
+      "description": "مسار واحد: طريقة HTTP، شرط المصادقة، مصادر المتغيرات، جسم الطلب، والردود الممكنة بحالاتها.",
+      "type": "object",
+      "required": ["method", "path", "auth", "summary", "request", "responses"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "enum": ["GET", "POST", "PUT", "DELETE"] },
+        "path": {
+          "description": "المسار الحرفي. الجزء :id متغير مسار لا اسم حقل، ويمرّ إلى الخدمة لا إلى السجل.",
+          "type": "string",
+          "pattern": "^/(healthz|v1/)"
+        },
+        "auth": {
+          "description": "bearer يعني أن الطلب يمرّ بحارس التوكن، وnone يعني أنه لا يحتاج توكناً أصلاً.",
+          "enum": ["none", "bearer"]
+        },
+        "summary": { "type": "string" },
+        "path_params": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "query": { "$ref": "#/$defs/profile_changed_query" },
+        "request": {
+          "description": "مخطط جسم الطلب. جسم فارغ يعني أن المسار لا يقرأ جسماً أصلاً."
+        },
+        "responses": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/response" }
+        }
+      }
+    },
+    "response": {
+      "title": "Cloud Response",
+      "description": "ردّ واحد ممكن. codes تخصّ ردود الخطأ فقط، وغيابها يعني نجاحاً. 204 بلا schema ولا body.",
+      "type": "object",
+      "required": ["status", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "integer", "minimum": 200, "maximum": 599 },
+        "description": { "type": "string" },
+        "codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/cloud_error/properties/code" }
+        },
+        "schema": { "description": "مخطط الجسم. غائب في 204 فقط." }
+      }
+    },
+    "fallback": {
+      "title": "Cloud Fallback",
+      "description": "ردّ لا يخصّ مساراً: مسار غير معروف، أو جسم تالف، أو خطأ غير متوقع.",
+      "type": "object",
+      "required": ["status", "code", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "integer", "minimum": 400, "maximum": 599 },
+        "code": { "$ref": "#/$defs/cloud_error/properties/code" },
+        "summary": { "type": "string" }
+      }
+    },
+    "cloud_error": {
+      "title": "Cloud Error",
+      "description": "كل رد فاشل يعيد رمزاً واحداً ثابتاً لا يُترجم ولا يُختصر. الواجهة تبني رسالتها منه بلغتها. لا حقول أخرى: ما نكشفه عن سبب الرفض هو ما يفيد المهاجم.",
+      "type": "object",
+      "required": ["code"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "invalid_credentials",
+            "session_invalid",
+            "session_expired",
+            "invalid_code",
+            "code_expired",
+            "account_locked",
+            "email_taken",
+            "rate_limited",
+            "too_many_attempts",
+            "device_limit",
+            "session_limit",
+            "profile_limit",
+            "rule_limit",
+            "storage_limit",
+            "invalid_slug",
+            "invalid_name",
+            "invalid_content",
+            "slug_taken",
+            "revision_conflict",
+            "not_found",
+            "invalid_body",
+            "internal"
+          ]
+        }
+      }
+    },
+    "error_status": {
+      "title": "Cloud Error Status",
+      "description": "حالة HTTP لكل رمز: نفس خريطة STATUS في server/src/index.ts، مضافاً إليها ما ترده وسيط الأخطاء مباشرة. الحالة جزء من العقد لا تفصيل رد.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "integer" },
+      "properties": {
+        "invalid_credentials": 401,
+        "session_invalid": 401,
+        "session_expired": 401,
+        "invalid_code": 400,
+        "code_expired": 410,
+        "account_locked": 423,
+        "email_taken": 409,
+        "rate_limited": 429,
+        "too_many_attempts": 429,
+        "device_limit": 409,
+        "session_limit": 409,
+        "profile_limit": 409,
+        "rule_limit": 409,
+        "storage_limit": 409,
+        "invalid_slug": 400,
+        "invalid_name": 400,
+        "invalid_content": 400,
+        "slug_taken": 409,
+        "revision_conflict": 409,
+        "not_found": 404,
+        "invalid_body": 400,
+        "internal": 500
+      }
+    },
+    "cloud_plan": {
+      "title": "Cloud Plan",
+      "description": "خطة الحساب. يقرّرها الخادم وحده ولا تُرسل في أي طلب، والعميل يعرضها فقط.",
+      "type": "string",
+      "enum": ["free", "pro"]
+    },
+    "health_status": {
+      "x-contract": true,
+      "title": "Health Status",
+      "description": "ردّ فحص الصحة. ليس خطأً، فليس له code: الفشل هنا 503 لا 4xx.",
+      "type": "object",
+      "required": ["ok"],
+      "additionalProperties": false,
+      "properties": {
+        "ok": { "type": "boolean" }
+      }
+    },
+    "signup_start_request": {
+      "x-contract": true,
+      "title": "Signup Start Request",
+      "description": "طلب تسجيل. حقل واحد، والخادم يردّ 202 في الحالتين: بريد جديد وبريد مستخدم.",
+      "type": "object",
+      "required": ["email"],
+      "properties": {
+        "email": { "type": "string", "minLength": 3, "maxLength": 254 }
+      }
+    },
+    "signup_start_accepted": {
+      "x-contract": true,
+      "title": "Signup Start Accepted",
+      "description": "الرمز أُرسل. غيابه في الإنتاج مقصود: في التطوير والاختبار وحدهما يُعاد في الرد وإلا تعذّر اختبار التدفق بلا خدمة بريد.",
+      "type": "object",
+      "required": ["sent"],
+      "properties": {
+        "sent": { "type": "boolean" },
+        "code": {
+          "description": "رمز تحقق من 8 أرقام. في الإنتاج لا يظهر أبداً.",
+          "type": "string",
+          "pattern": "^[0-9]{8}$"
+        }
+      }
+    },
+    "signup_confirm_request": {
+      "x-contract": true,
+      "title": "Signup Confirm Request",
+      "description": "تأكيد التسجيل. الربط بالرمز نفسه، والبريد للتحقق البشري لا للاستعلام.",
+      "type": "object",
+      "required": ["email", "code"],
+      "properties": {
+        "email": { "type": "string", "minLength": 3, "maxLength": 254 },
+        "code": { "type": "string", "pattern": "^[0-9]{8}$" }
+      }
+    },
+    "signup_confirm_created": {
+      "x-contract": true,
+      "title": "Signup Confirm Created",
+      "description": "الحساب نشط. الـPIN يعاد مرة واحدة هنا، وغيابه بعد ذلك في كل الأدوات مقصود: ما لا يُخزَّن إلا مجزّأً لا يُستعاد.",
+      "type": "object",
+      "required": ["pin"],
+      "additionalProperties": false,
+      "properties": {
+        "pin": { "type": "string", "pattern": "^[0-9]{4,8}$" }
+      }
+    },
+    "login_request": {
+      "x-contract": true,
+      "title": "Login Request",
+      "description": "دخول بالـPIN. الحقول snake_case لأنها تُقرأ من req.body بالحرف. غياب حقل يعامله الخادم كسلسلة فارغة، فلا نعدم الرد ولا نكشف أي حقل نقص.",
+      "type": "object",
+      "required": ["email", "pin", "device_id", "device_label"],
+      "properties": {
+        "email": { "type": "string", "minLength": 3, "maxLength": 254 },
+        "pin": { "description": "من 4 إلى 8 أرقام. مخزَّن مجزّأً بـArgon2id.", "type": "string" },
+        "device_id": {
+          "description": "معرّف ثابت يولّده العميل مرة واحدة ويُخزَّن محلياً. تقييد الأجهزة يعتمد عليه لا على عنوان IP.",
+          "type": "string"
+        },
+        "device_label": {
+          "description": "اسم يعرضه المستخدم في شاشة الأجهزة. يُعرض نصاً ولا يُستخدم كأمر.",
+          "type": "string",
+          "maxLength": 120
+        }
+      }
+    },
+    "login_ok": {
+      "x-contract": true,
+      "title": "Login Response",
+      "description": "زوج التوكنات. كل الأسماء snake_case كقاعدة المستودع، ونقل camelCase إلى هذا السلك يتم في server/src/index.ts عند نقطة التسلسل وحدها، لا هنا.",
+      "type": "object",
+      "required": ["access_token", "refresh_token", "expires_in", "user_id", "plan"],
+      "additionalProperties": false,
+      "properties": {
+        "access_token": { "type": "string", "minLength": 1 },
+        "refresh_token": { "description": "يُخزَّن مجزّأً في الخادم ويُبطَل عند كل تجديد.", "type": "string", "minLength": 1 },
+        "expires_in": { "description": "ثوانٍ حتى انتهاء توكن الوصول.", "type": "integer", "minimum": 1 },
+        "user_id": { "type": "string", "minLength": 1 },
+        "plan": { "$ref": "#/$defs/cloud_plan" }
+      }
+    },
+    "refresh_request": {
+      "x-contract": true,
+      "title": "Refresh Request",
+      "description": "تجديد التوكن. التوكن في الجسم لا الترويسة، فهو سرّ طويل العمر لا يُعرض على كل طلب.",
+      "type": "object",
+      "required": ["refresh_token"],
+      "properties": {
+        "refresh_token": { "type": "string", "minLength": 1 }
+      }
+    },
+    "refresh_ok": {
+      "x-contract": true,
+      "title": "Refresh Response",
+      "description": "توكن وصول جديد وتوكن تجديد جديد. لا user_id ولا plan: التجديد لا يغيّر الحساب ولا خطته.",
+      "type": "object",
+      "required": ["access_token", "refresh_token", "expires_in"],
+      "additionalProperties": false,
+      "properties": {
+        "access_token": { "type": "string", "minLength": 1 },
+        "refresh_token": { "type": "string", "minLength": 1 },
+        "expires_in": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "logout_request": {
+      "x-contract": true,
+      "title": "Logout Request",
+      "description": "إبطال جلسة واحدة. لا bearer: التوكن هنا هو مفتاح الإبطال نفسه.",
+      "type": "object",
+      "required": ["refresh_token"],
+      "properties": {
+        "refresh_token": { "type": "string" }
+      }
+    },
+    "session_view": {
+      "x-contract": true,
+      "title": "Session View",
+      "description": "جلسة واحدة للعرض. active محسوب في الخادم: غير مُبطل ولم ينتهِ.",
+      "type": "object",
+      "required": ["device_label", "created_at", "last_used_at", "active"],
+      "additionalProperties": false,
+      "properties": {
+        "device_label": { "type": "string" },
+        "created_at": { "description": "وقت ISO 8601.", "type": "string", "format": "date-time" },
+        "last_used_at": { "description": "وقت ISO 8601. يحدّثه كل طلب يمرّ بحارس التوكن.", "type": "string", "format": "date-time" },
+        "active": { "type": "boolean" }
+      }
+    },
+    "session_list": {
+      "x-contract": true,
+      "title": "Session List",
+      "description": "كل جلسات المستخدم. حقل واحد يلفّ القائمة، فلا يرد الخادم مصفوفة عارية.",
+      "type": "object",
+      "required": ["sessions"],
+      "additionalProperties": false,
+      "properties": {
+        "sessions": { "type": "array", "maxItems": 50, "items": { "$ref": "#/$defs/session_view" } }
+      }
+    },
+    "cloud_profile_content": {
+      "x-contract": true,
+      "title": "Cloud Profile Content",
+      "description": "محتوى الملف: rules وsettings. الخادم يفحص الأنواع والحقول المطلوبة فقط ولا يرفض ما لا يعرفه، فعميل أحدث يجب أن يعمل مع خادم أقدم. دلالات القاعدة يقرّرها المحرك في lansher-core لا هذا العقد.",
+      "type": "object",
+      "properties": {
+        "rules": { "type": "array", "items": { "$ref": "#/$defs/cloud_rule" } },
+        "settings": { "type": "object" }
+      }
+    },
+    "cloud_rule": {
+      "x-contract": true,
+      "title": "Cloud Rule",
+      "description": "قاعدة داخل content. هذه الحقول الستة هي ما يفحصه الخادم؛ وما عداها يتبع schemas/rule.schema.json ولا يُرفض إن غاب أو زاد.",
+      "type": "object",
+      "required": ["id", "name", "enabled", "priority", "conditions", "actions"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "priority": { "type": "number" },
+        "conditions": { "type": "array" },
+        "actions": { "type": "array" }
+      }
+    },
+    "profile_summary": {
+      "x-contract": true,
+      "title": "Profile Summary",
+      "description": "ملف بلا محتوى. revision هو عدّاد رتيب يزيد في كل كتابة، وupdated_at هو ما يقارن به العميل مزامنته.",
+      "type": "object",
+      "required": ["id", "slug", "name", "revision", "updated_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "revision": { "type": "integer", "minimum": 1 },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "profile_view": {
+      "x-contract": true,
+      "title": "Profile View",
+      "description": "ملف واحد بمحتواه. الحقول الخمسة نفسها كملخص، مضافاً إليها content.",
+      "type": "object",
+      "required": ["id", "slug", "name", "revision", "updated_at", "content"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "revision": { "type": "integer", "minimum": 1 },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "content": { "$ref": "#/$defs/cloud_profile_content" }
+      }
+    },
+    "profile_list": {
+      "x-contract": true,
+      "title": "Profile List",
+      "description": "قائمة ملفات بلا محتوى. حقل واحد يلفّ القائمة.",
+      "type": "object",
+      "required": ["profiles"],
+      "additionalProperties": false,
+      "properties": {
+        "profiles": { "type": "array", "items": { "$ref": "#/$defs/profile_summary" } }
+      }
+    },
+    "profile_changed_query": {
+      "x-contract": true,
+      "title": "Profile Changed Query",
+      "description": "الاستعلام الوحيد في المسار كله. since اختياري: غيابه يعني كل الملفات.",
+      "type": "object",
+      "properties": {
+        "since": { "type": "string", "format": "date-time" }
+      }
+    },
+    "create_profile_request": {
+      "x-contract": true,
+      "title": "Create Profile Request",
+      "description": "ملف جديد. الحدود تُفحص قبل أي كتابة، فالرفض لا يترك أثراً في القاعدة.",
+      "type": "object",
+      "required": ["slug", "name", "content"],
+      "properties": {
+        "slug": { "description": "معرّف يعرضه العميل، وحيد داخل الحساب.", "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "content": { "$ref": "#/$defs/cloud_profile_content" },
+        "device_id": { "description": "من أي جهاز جاءت الكتابة، للتدقيق وكشف التعارض. غيابه يعني جهازاً غير معروف.", "type": "string" }
+      }
+    },
+    "write_profile_request": {
+      "x-contract": true,
+      "title": "Write Profile Request",
+      "description": "كتابة على ملف قائم. expected_revision إجباري: بلاه تفوز الكتابة الأخيرة وتمحو عمل غيرك.",
+      "type": "object",
+      "required": ["expected_revision", "name", "content"],
+      "properties": {
+        "expected_revision": { "type": "integer", "minimum": 1 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "content": { "$ref": "#/$defs/cloud_profile_content" },
+        "device_id": { "description": "من أي جهاز جاءت الكتابة، للتدقيق وكشف التعارض. غيابه يعني جهازاً غير معروف.", "type": "string" }
+      }
+    },
+    "delete_profile_request": {
+      "x-contract": true,
+      "title": "Delete Profile Request",
+      "description": "حذف. لا اسم ولا محتوى: الحذف يفحص المراجعة وحدها، فلا يغيّر شيئاً قبل أن يتأكد.",
+      "type": "object",
+      "required": ["expected_revision"],
+      "properties": {
+        "expected_revision": { "type": "integer", "minimum": 1 },
+        "device_id": { "description": "من أي جهاز جاء الحذف، للتدقيق. غيابه يعني جهازاً غير معروف.", "type": "string" }
+      }
+    }
+  }
+}

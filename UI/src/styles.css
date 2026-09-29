@@ -1,0 +1,9 @@
+/* نقطة الدخول الوحيدة للأنماط. الترتيب ليس اعتباطياً: التوكنز
+ * تُعرَّف قبل ما يستهلكها الأساس، والصدفة قبل المكوّنات لأنها
+ * تحدّد المتغيّرات التي تركّب عليها. من يضيف صنفاً جديداً يضيفه في
+ * `styles/components.css` لا هنا. */
+
+@import "./styles/tokens.css";
+@import "./styles/base.css";
+@import "./styles/shell.css";
+@import "./styles/components.css";

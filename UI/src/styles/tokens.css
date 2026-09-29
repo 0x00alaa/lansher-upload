@@ -1,0 +1,174 @@
+/* توكنز التصميم. كل لون في الواجهة يمر من هنا، فلا لون مكتوب في
+ * أي مكوّن. ثلاثة محاور مستقلة: السمة (فاتح/داكن)، لون التمييز،
+ * ومقياس الحجم. كُلٌّ منها يتبدّل بتبديل سمة على `html` بلا إعادة
+ * بناء، لأن React لا يقرأ هذه القيم أصلاً: CSS وحده يحلّها.
+ *
+ * الأسماء تتبع دورها لا لونها: `--surface` هو سطح لا لون، فلو غُيّر
+ * لون التمييز لم يحتج أحد يعرف أي متغيّر يجب أن يلمسه. */
+
+:root {
+  /* مقياس الواجهة. كل المقاسات أدناه بالـ`rem`، فجذر واحد يضبط
+   * الشاشة كلها. 100% لشاشة 1080p، 125% لـ2K، 150% لـ4K. */
+  --ui-scale: 1;
+
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-full: 9999px;
+
+  --sidebar-width: 16.5rem;
+  --sidebar-rail: 4rem;
+  --topbar-height: 3.5rem;
+  --content-max: 72rem;
+
+  --ring-width: 2px;
+  --transition: 140ms cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* خطوط النظام. لا نضمّن ملف خط: التطبيق يعمل دون اتصال، والخط
+   * المضمّن يجرّ ترخيصاً ونسخ أصول لا نحتاجها. لو أُحمد الخط لاحقاً
+   * فالمسار كله محصور في هذين المتغيّرين. */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+    "Noto Sans Arabic", Tahoma, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Semibold",
+    var(--font-ui);
+  --font-mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+}
+
+/* الألوان المحايدة: فاتح وداكن. الفارق بينهما ليس قلباً للعُقد بل
+ * تبديل قيم، فالقاعدة متطابقة والتباين محسوب لكل واحدة. */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f6f6f8;
+  --bg-inset: #eeeef1;
+  --surface: #ffffff;
+  --surface-2: #f4f4f6;
+  --surface-3: #ebebef;
+  --border: #e3e3e8;
+  --border-strong: #d0d0d8;
+
+  --fg: #17171b;
+  --fg-muted: #6b6b76;
+  --fg-subtle: #9797a3;
+
+  --ok: #14804a;
+  --ok-soft: rgb(20 128 74 / 10%);
+  --warn: #a16207;
+  --warn-soft: rgb(161 98 7 / 10%);
+  --bad: #c2263a;
+  --bad-soft: rgb(194 38 58 / 10%);
+  --info: #1d64d1;
+  --info-soft: rgb(29 100 209 / 10%);
+
+  --shadow-sm: 0 1px 2px rgb(16 16 24 / 6%);
+  --shadow-md: 0 4px 12px -2px rgb(16 16 24 / 10%), 0 2px 4px -2px rgb(16 16 24 / 6%);
+  --shadow-lg: 0 16px 48px -12px rgb(16 16 24 / 22%);
+  --overlay: rgb(16 16 24 / 45%);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #08080b;
+  --bg-inset: #050507;
+  --surface: #101014;
+  --surface-2: #17171d;
+  --surface-3: #1f1f27;
+  --border: #26262f;
+  --border-strong: #34343f;
+
+  --fg: #f2f2f5;
+  --fg-muted: #9d9daa;
+  --fg-subtle: #6e6e7c;
+
+  --ok: #3ecf7f;
+  --ok-soft: rgb(62 207 127 / 12%);
+  --warn: #e0a23c;
+  --warn-soft: rgb(224 162 60 / 12%);
+  --bad: #f2566d;
+  --bad-soft: rgb(242 86 109 / 12%);
+  --info: #5b9dff;
+  --info-soft: rgb(91 157 255 / 12%);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 4px 14px -2px rgb(0 0 0 / 55%);
+  --shadow-lg: 0 20px 56px -12px rgb(0 0 0 / 70%);
+  --overlay: rgb(0 0 0 / 60%);
+}
+
+/* لون التمييز. عشرة خيارات، كلٌّ ثلاثة قيم: لون صلب، لون نصّي فوقه،
+ * وحلقة تركيز. الاسم يبقى في `data-accent` فيُختار من التفضيلات
+ * ولا يُكتب في أي مكان آخر. */
+[data-accent="violet"] {
+  --brand: #6d5efc;
+  --brand-fg: #ffffff;
+  --brand-hover: #5c4bf0;
+  --brand-soft: rgb(109 94 252 / 12%);
+  --brand-ring: rgb(109 94 252 / 45%);
+}
+[data-accent="sky"] {
+  --brand: #0284c7;
+  --brand-fg: #ffffff;
+  --brand-hover: #0270aa;
+  --brand-soft: rgb(2 132 199 / 12%);
+  --brand-ring: rgb(2 132 199 / 45%);
+}
+[data-accent="blue"] {
+  --brand: #2563eb;
+  --brand-fg: #ffffff;
+  --brand-hover: #1d4fd8;
+  --brand-soft: rgb(37 99 235 / 12%);
+  --brand-ring: rgb(37 99 235 / 45%);
+}
+[data-accent="teal"] {
+  --brand: #0d9488;
+  --brand-fg: #ffffff;
+  --brand-hover: #0b7c72;
+  --brand-soft: rgb(13 148 136 / 12%);
+  --brand-ring: rgb(13 148 136 / 45%);
+}
+[data-accent="green"] {
+  --brand: #16a34a;
+  --brand-fg: #ffffff;
+  --brand-hover: #128a3e;
+  --brand-soft: rgb(22 163 74 / 12%);
+  --brand-ring: rgb(22 163 74 / 45%);
+}
+[data-accent="lime"] {
+  --brand: #4d7c0f;
+  --brand-fg: #ffffff;
+  --brand-hover: #3f660c;
+  --brand-soft: rgb(77 124 15 / 12%);
+  --brand-ring: rgb(77 124 15 / 45%);
+}
+[data-accent="amber"] {
+  --brand: #d97706;
+  --brand-fg: #ffffff;
+  --brand-hover: #b96305;
+  --brand-soft: rgb(217 119 6 / 12%);
+  --brand-ring: rgb(217 119 6 / 45%);
+}
+[data-accent="orange"] {
+  --brand: #ea580c;
+  --brand-fg: #ffffff;
+  --brand-hover: #c74a09;
+  --brand-soft: rgb(234 88 12 / 12%);
+  --brand-ring: rgb(234 88 12 / 45%);
+}
+[data-accent="rose"] {
+  --brand: #e11d48;
+  --brand-fg: #ffffff;
+  --brand-hover: #c2173c;
+  --brand-soft: rgb(225 29 72 / 12%);
+  --brand-ring: rgb(225 29 72 / 45%);
+}
+[data-accent="pink"] {
+  --brand: #db2777;
+  --brand-fg: #ffffff;
+  --brand-hover: #b91f66;
+  --brand-soft: rgb(219 39 119 / 12%);
+  --brand-ring: rgb(219 39 119 / 45%);
+}

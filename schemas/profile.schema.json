@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lansher.dev/schemas/profile.schema.json",
+  "title": "Profile",
+  "type": "object",
+  "required": ["id", "name", "local_revision", "updated_at_ms"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "bound_unique_id": { "type": ["string", "null"] },
+    "identity_keys": {
+      "description": "المفتاح الخاص يبقى محلياً. لا يُرفع إلى الخادم إلا بموافقة صريحة.",
+      "type": ["object", "null"],
+      "required": ["public_key_b64", "created_at_ms"],
+      "properties": {
+        "public_key_b64": { "type": "string" },
+        "private_key_b64": { "type": ["string", "null"] },
+        "created_at_ms": { "type": "integer" }
+      }
+    },
+    "settings": { "type": "object" },
+    "rules": { "type": "array", "items": { "$ref": "rule.schema.json" } },
+    "local_revision": { "type": "integer", "minimum": 0 },
+    "remote_revision": { "type": ["integer", "null"] },
+    "updated_at_ms": { "type": "integer" },
+    "dirty": { "type": "boolean" }
+  }
+}

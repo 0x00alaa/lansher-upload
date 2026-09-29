@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lansher.dev/schemas/request.schema.json",
+  "title": "Bridge Request",
+  "description": "كل طلب بين الواجهة والنواة. نفس التمييز في Rust و TypeScript.",
+  "type": "object",
+  "required": ["cmd"],
+  "properties": {
+    "cmd": {
+      "type": "string",
+      "enum": [
+        "hello",
+        "get_state",
+        "list_rules",
+        "upsert_rule",
+        "delete_rule",
+        "test_rule",
+        "push_event",
+        "get_event_history",
+        "get_action_history",
+        "explain_rule",
+        "list_profiles",
+        "upsert_profile",
+        "set_goal",
+        "get_diag"
+      ]
+    },
+    "protocol": { "type": "integer" },
+    "token": { "type": "string" },
+    "client": { "type": "string" },
+    "rule": { "$ref": "rule.schema.json" },
+    "id": { "type": "string" },
+    "event": { "$ref": "event.schema.json" },
+    "limit": { "type": "integer", "minimum": 1, "maximum": 2000 },
+    "rule_id": { "type": "string" },
+    "profile": { "$ref": "profile.schema.json" },
+    "goal_id": { "type": "string" },
+    "amount": { "type": "integer" },
+    "component": { "type": "string" }
+  },
+  "oneOf": [
+    {
+      "title": "hello",
+      "required": ["cmd", "protocol", "token", "client"],
+      "properties": { "cmd": { "const": "hello" } }
+    },
+    {
+      "title": "upsert_rule",
+      "required": ["cmd", "rule"],
+      "properties": { "cmd": { "const": "upsert_rule" } }
+    },
+    {
+      "title": "delete_rule",
+      "required": ["cmd", "id"],
+      "properties": { "cmd": { "const": "delete_rule" } }
+    },
+    {
+      "title": "test_rule",
+      "required": ["cmd", "rule", "event"],
+      "properties": { "cmd": { "const": "test_rule" } }
+    },
+    {
+      "title": "push_event",
+      "required": ["cmd", "event"],
+      "properties": { "cmd": { "const": "push_event" } }
+    },
+    {
+      "title": "get_event_history",
+      "required": ["cmd", "limit"],
+      "properties": { "cmd": { "const": "get_event_history" } }
+    },
+    {
+      "title": "get_action_history",
+      "required": ["cmd", "limit"],
+      "properties": { "cmd": { "const": "get_action_history" } }
+    },
+    {
+      "title": "explain_rule",
+      "required": ["cmd", "rule_id", "event"],
+      "properties": { "cmd": { "const": "explain_rule" } }
+    },
+    {
+      "title": "upsert_profile",
+      "required": ["cmd", "profile"],
+      "properties": { "cmd": { "const": "upsert_profile" } }
+    },
+    {
+      "title": "set_goal",
+      "required": ["cmd", "goal_id", "amount"],
+      "properties": { "cmd": { "const": "set_goal" } }
+    },
+    {
+      "title": "get_diag",
+      "required": ["cmd", "component"],
+      "properties": { "cmd": { "const": "get_diag" } }
+    },
+    {
+      "title": "أوامر بلا معاملات",
+      "required": ["cmd"],
+      "properties": {
+        "cmd": {
+          "enum": ["get_state", "list_rules", "list_profiles"]
+        }
+      }
+    }
+  ]
+}

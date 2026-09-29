@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lansher.dev/schemas/event.schema.json",
+  "title": "LiveEvent",
+  "description": "حدث بث واحد. المرجع التنفيذ في crates/lansher-core/src/event.rs، والنسخة المطابقة في UI/src/types.ts. أسماء الحقول snake_case ولا تُترجم. total_value للهدايا يُحسب محلياً ولا يُقرأ من المصدر.",
+  "type": "object",
+  "required": ["id", "event_type", "ts_ms", "received_ms", "source", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "معرّف فريد للحدث. يُستخدم في نافذة منع التكرار، فلا يجوز إعادة توليده عند إعادة الإرسال.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "event_type": { "$ref": "#/$defs/eventType" },
+    "ts_ms": {
+      "description": "زمن الحدث عند المصدر بالمللي ثانية.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "received_ms": {
+      "description": "زمن استلامنا للحدث بالمللي ثانية. الفارق بينهما هو زمن الاستجابة.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "source": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "user": {
+      "oneOf": [{ "$ref": "#/$defs/user" }, { "type": "null" }]
+    },
+    "payload": { "$ref": "#/$defs/payload" },
+    "raw": {
+      "description": "الحمولة الأصلية كما وصلت من المصدر، للتشخيص فقط. ليست جزءاً من العقد المنطقي. يقبلها Rust كـ Option<serde_json::Value>، فهي أي JSON: كائن أو مصفوفة أو نص أو رقم أو منطقي أو null.",
+      "type": ["object", "array", "string", "number", "boolean", "null"]
+    }
+  },
+  "$defs": {
+    "eventType": {
+      "description": "يطابق #[serde(tag = \"kind\", content = \"name\")]: الوحدة كائن لا نص.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "StreamStart",
+                "StreamEnd",
+                "Chat",
+                "Like",
+                "Gift",
+                "Follow",
+                "Share",
+                "Join",
+                "Subscribe"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "name"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "Custom" },
+            "name": { "type": "string", "minLength": 1, "maxLength": 64 }
+          }
+        }
+      ]
+    },
+    "user": {
+      "type": "object",
+      "required": ["nickname"],
+      "properties": {
+        "nickname": { "type": "string", "maxLength": 128 },
+        "unique_id": { "type": ["string", "null"] },
+        "is_follower": {
+          "description": "null يعني غير معروف. لا يُعامل null كـ true ولا كـ false.",
+          "type": ["boolean", "null"]
+        },
+        "is_subscriber": {
+          "description": "null يعني غير معروف. لا يُعامل null كـ true ولا كـ false.",
+          "type": ["boolean", "null"]
+        },
+        "avatar": { "type": ["string", "null"] }
+      }
+    },
+    "payload": {
+      "description": "الأنواع عديمة البيانات تُسلسل بلا حقل data.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "data"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "Chat" },
+            "data": {
+              "type": "object",
+              "required": ["text"],
+              "additionalProperties": false,
+              "properties": { "text": { "type": "string", "maxLength": 2000 } }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "data"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "Like" },
+            "data": {
+              "type": "object",
+              "required": ["count"],
+              "additionalProperties": false,
+              "properties": { "count": { "type": "integer", "minimum": 0 } }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "data"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "Gift" },
+            "data": {
+              "type": "object",
+              "required": ["name", "count", "value_per_unit", "total_value"],
+              "additionalProperties": false,
+              "properties": {
+                "gift_id": { "type": ["string", "null"] },
+                "name": { "type": "string", "maxLength": 128 },
+                "count": { "type": "integer", "minimum": 0 },
+                "value_per_unit": { "type": "integer", "minimum": 0 },
+                "total_value": {
+                  "description": "يُحسب محلياً: count × value_per_unit. لا يُقرأ من المصدر.",
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": { "kind": { "const": "Follow" } }
+        },
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": { "kind": { "const": "Share" } }
+        },
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": { "kind": { "const": "Join" } }
+        },
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "Subscribe" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "tier": { "type": ["string", "null"] } }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "data"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "StreamStart" },
+            "data": {
+              "type": "object",
+              "required": ["unique_id"],
+              "additionalProperties": false,
+              "properties": {
+                "unique_id": { "type": "string", "minLength": 1 },
+                "title": { "type": ["string", "null"] }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "data"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "StreamEnd" },
+            "data": {
+              "type": "object",
+              "required": ["unique_id", "duration_ms"],
+              "additionalProperties": false,
+              "properties": {
+                "unique_id": { "type": "string", "minLength": 1 },
+                "duration_ms": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "data"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "Custom" },
+            "data": { "type": "object" }
+          }
+        }
+      ]
+    }
+  }
+}
